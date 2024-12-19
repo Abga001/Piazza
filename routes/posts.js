@@ -108,18 +108,6 @@ const getHighestInterestPost = async (filter) => {
   ]);
 };
 
-// GET the Tech post (active or expired) with the highest interest
-router.get("/highest-interest/tech", verifyToken, async (req, res) => {
-  try {
-    const posts = await getHighestInterestPost({ topic: "Tech" });
-    if (!posts.length) 
-      return res.status(404).json({ message: "No posts found in the Tech topic." });
-    res.status(200).json(posts[0]);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
 // GET the most active post (highest interest) in a specific topic
 router.get("/active/:topic/highest-interest", verifyToken, async (req, res) => {
   try {
@@ -142,26 +130,67 @@ router.get("/active/:topic/highest-interest", verifyToken, async (req, res) => {
   }
 });
 
+// Add a comment to a post
+router.post("/:postId/comment", verifyToken, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { text } = req.body;
+
+    // Validate the comment text
+    if (!text || text.trim() === "") {
+      return res.status(400).json({ message: "Comment text cannot be empty" });
+    }
+
+    // Find the post by ID
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    // Check if the post is expired
+    if (new Date() > post.expirationTime) {
+      return res.status(400).json({ message: "Cannot comment on an expired post." });
+    }
+
+    // Add the comment to the comments array
+    const newComment = {
+      userId: req.user._id,
+      userName: req.user.username, // Optional: include username if available
+      text: text.trim(),
+      createdAt: new Date()
+    };
+
+    post.comments.push(newComment);
+    await post.save();
+
+    res.status(200).json({ message: "Comment added successfully", comments: post.comments });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Helper function to handle post interactions (like/dislike)
 const updatePostInteraction = async (postId, userId, action) => {
   const post = await Post.findById(postId);
   if (!post) throw new Error("Post not found");
+
+  if (new Date() > post.expirationTime) throw new Error("Cannot interact with an expired post");
 
   if (action === "like") {
     if (post.userId.toString() === userId) throw new Error("Cannot like your own post");
     if (post.likes.includes(userId)) throw new Error("Already liked this post");
     post.likes.push(userId);
   } else if (action === "dislike") {
-    if (new Date() > post.expirationTime) throw new Error("Cannot dislike an expired post");
     if (post.userId.toString() === userId) throw new Error("Cannot dislike your own post");
     if (post.dislikes.includes(userId)) throw new Error("Already disliked this post");
     post.dislikes.push(userId);
     post.likes = post.likes.filter((id) => id !== userId); // Remove like if it exists
   }
+  
+  // Save the post and return it
   await post.save();
   return post;
 };
-
 // POST to like or dislike a post
 router.post("/:postId/:action", verifyToken, async (req, res) => {
   try {
@@ -171,7 +200,9 @@ router.post("/:postId/:action", verifyToken, async (req, res) => {
     if (!["like", "dislike"].includes(action)) 
       return res.status(400).json({ message: "Invalid action" });
 
+    // Use the helper function to handle the interaction
     const post = await updatePostInteraction(postId, req.user._id, action);
+
     res.status(200).json({ message: `Post ${action}d successfully`, post });
   } catch (err) {
     res.status(500).json({ message: err.message });
