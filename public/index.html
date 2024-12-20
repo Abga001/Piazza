@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posts - Piazza</title>
+    <style>
+        /* Basic styling for the page and post elements */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .post {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .post h3 {
+            margin: 0;
+        }
+        .actions {
+            margin-top: 10px;
+        }
+        .comments {
+            margin-top: 20px;
+        }
+        .comments h4 {
+            margin: 10px 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Posts</h1>
+    <!-- Container to display all posts -->
+    <div id="posts-container"></div>
+
+    <script>
+        // API base URL (update this to your backend's base URL)
+        const API_BASE_URL = 'https://35.239.189.67/api';
+        // Replace with a valid JWT token for authenticated requests
+        const token = 'your-auth-token';
+
+        /**
+         * Fetch all posts from the backend and display them.
+         */
+        async function fetchPosts() {
+            // Fetch posts using the API
+            const response = await fetch(`${API_BASE_URL}/posts`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            const posts = await response.json();
+
+            // Select the container to display posts
+            const postsContainer = document.getElementById('posts-container');
+            postsContainer.innerHTML = ''; // Clear previous content
+
+            // Iterate through each post and generate HTML for it
+            posts.forEach((post) => {
+                const postElement = document.createElement('div');
+                postElement.classList.add('post');
+                postElement.innerHTML = `
+                    <h3>${post.title}</h3> <!-- Display post title -->
+                    <p>${post.message}</p> <!-- Display post message -->
+                    <p><strong>Likes:</strong> ${post.likes.length}</p>
+                    <div class="actions">
+                        <!-- Buttons to like the post and comment -->
+                        <button onclick="likePost('${post._id}')">Like</button>
+                        <button onclick="showCommentForm('${post._id}')">Comment</button>
+                    </div>
+                    <div id="comments-${post._id}" class="comments">
+                        <h4>Comments:</h4>
+                        <!-- Display existing comments -->
+                        ${post.comments
+                            .map(
+                                (comment) => `
+                                <p><strong>${comment.userId}:</strong> ${comment.text}</p>
+                            `
+                            )
+                            .join('')}
+                        <!-- Comment form (hidden by default) -->
+                        <form id="comment-form-${post._id}" style="display: none;" onsubmit="addComment(event, '${post._id}')">
+                            <textarea id="comment-text-${post._id}" rows="3" style="width: 100%;" placeholder="Write a comment..."></textarea>
+                            <button type="submit">Add Comment</button>
+                        </form>
+                    </div>
+                `;
+                postsContainer.appendChild(postElement);
+            });
+        }
+
+        /**
+         * Send a request to like a specific post.
+         * @param {string} postId - ID of the post to like.
+         */
+        async function likePost(postId) {
+            const response = await fetch(`${API_BASE_URL}/posts/${postId}/like`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+
+            if (response.ok) {
+                alert('Post liked successfully!');
+                fetchPosts(); // Refresh the posts to show updated like count
+            } else {
+                alert('Error liking the post');
+            }
+        }
+
+        /**
+         * Show or hide the comment form for a specific post.
+         * @param {string} postId - ID of the post.
+         */
+        function showCommentForm(postId) {
+            const form = document.getElementById(`comment-form-${postId}`);
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        /**
+         * Add a comment to a specific post.
+         * @param {Event} event - Form submission event.
+         * @param {string} postId - ID of the post to comment on.
+         */
+        async function addComment(event, postId) {
+            event.preventDefault(); // Prevent the form from reloading the page
+
+            // Get the comment text
+            const commentText = document.getElementById(`comment-text-${postId}`).value;
+
+            // Send the comment to the backend
+            const response = await fetch(`${API_BASE_URL}/posts/${postId}/comment`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ text: commentText }),
+            });
+
+            if (response.ok) {
+                alert('Comment added successfully!');
+                fetchPosts(); // Refresh posts to show the new comment
+            } else {
+                alert('Error adding comment');
+            }
+        }
+
+        // Initialize the page by fetching and displaying posts
+        fetchPosts();
+    </script>
+</body>
+</html>
